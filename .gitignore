@@ -40,7 +40,27 @@ ExportedObj/
 *.mdb
 *.opendb
 *.VC.db
-
+*.vsconfig
+Assets/ExternalDependencyManager/
+Assets/ExternalDependencyManager.meta
+Assets/Firebase/
+Assets/Firebase.meta
+Assets/Plugins/Android/
+Assets/Plugins/Android.meta
+Assets/Plugins/iOS/Firebase/
+Assets/Plugins/iOS/Firebase.meta
+Assets/Editor Default Resources/
+Assets/Editor Default Resources.meta
+Assets/Parse/
+Assets/Parse.meta
+google-services-desktop.json
+google-services-desktop.json.meta
+AndroidResolverDependencies.xml
+GvhProjectSettings.xml
+GoogleService-Info.plist.meta
+GoogleService-Info.plist
+google-services.json
+google-services.json.meta
 # Unity3D generated meta files
 *.pidb.meta
 *.pdb.meta
