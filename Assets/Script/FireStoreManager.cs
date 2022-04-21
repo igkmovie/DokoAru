@@ -15,13 +15,16 @@ public interface ISnapshot
 [FirestoreData] public interface IFirestoredata
 {
 }
-
+public delegate void EventListenerHandler(Dictionary<string, object> dict);
+public delegate void EventListenersHandler(List<Dictionary<string, object>> dicts);
 public interface IFireStoreManager
 {
     //データ取得
-    Action<Dictionary<string, object>> GetListenerHandler(string document, string collectiton);
-    List<Action<Dictionary<string, object>>> GetListenerHandlers(string collectiton);
-    List<Action<Dictionary<string, object>>> GetListenerHandlers(string Document, object value, string collectiton);
+    event EventListenerHandler ListenerHandler;
+    event EventListenersHandler ListenersHandler;
+    void SetListenerHandler(string document, string collectiton);
+    void SetListenerHandlers(string collectiton);
+    void SetListenerHandlers(string Document, object value, string collectiton);
     UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection);
     UniTask<ISnapshot> GetISnapshotDocumetAsync(string document, string collection);
     UniTask<List<Dictionary<string, object>>> GetDocumetsAsync(string document, object value, string collection);
@@ -38,43 +41,42 @@ public class FireStoreManager : IFireStoreManager
 {
     private FirebaseFirestore _firestore;
 
-    FireStoreManager()
+    public event EventListenerHandler ListenerHandler;
+    public event EventListenersHandler ListenersHandler;
+
+    public FireStoreManager()
     {
         _firestore = FirebaseFirestore.DefaultInstance;
     }
-    public Action<Dictionary<string, object>> GetListenerHandler(string document, string collectiton)
+    public void SetListenerHandler(string document, string collectiton)
     {
         DocumentReference reference = _firestore.Collection(collectiton).Document(document);
-        var dict = new Dictionary<string, object>();
-        Action<Dictionary<string, object>> callback = dict => { };
 
         reference.Listen(snapshot => {
-            Dictionary<string, object> dict = snapshot.ToDictionary();
-            callback(dict);
+            Dictionary<string, object> dic = snapshot.ToDictionary();
+            Debug.Log("listener");
+            ListenerHandler(dic);
         });
-        return callback;
     }
-    public List<Action<Dictionary<string, object>>> GetListenerHandlers(string collectiton)
+
+    public void SetListenerHandlers(string collectiton)
     {
         CollectionReference reference = _firestore.Collection(collectiton);
-        var dict = new Dictionary<string, object>();
-        List<Action<Dictionary<string, object>>> callbacks = new List<Action<Dictionary<string, object>>>();
-
+        List<Dictionary<string, object>> dicts = new List<Dictionary<string, object>>();
         reference.Listen(snapshot => {
             foreach(DocumentSnapshot documentSnapshot in snapshot.Documents)
             {
                 var dict = documentSnapshot.ToDictionary();
-                Action<Dictionary<string, object>> callback = dic => { };
-                callback(dict);
+                dicts.Add(dict);
             }
+            ListenersHandler(dicts);
         });
-        return callbacks;
+        
     }
-    public List<Action<Dictionary<string, object>>> GetListenerHandlers(string Document, object value,   string collectiton)
+    public void SetListenerHandlers(string Document, object value,   string collectiton)
     {
 
         Query query = _firestore.Collection(collectiton).WhereEqualTo(Document,value);
-        var dict = new Dictionary<string, object>();
         List<Action<Dictionary<string, object>>> callbacks = new List<Action<Dictionary<string, object>>>();
 
         query.Listen(snapshot => {
@@ -87,7 +89,6 @@ public class FireStoreManager : IFireStoreManager
             var a = snapshot.GetChanges();
             
         });
-        return callbacks;
     }
     public async UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection)
     {
@@ -138,12 +139,14 @@ public class FireStoreManager : IFireStoreManager
         {
             DocumentReference docRef = _firestore.Collection(collectiton).Document(document);
             await docRef.SetAsync(dict);
+            Debug.Log("send");
             return true;
         }
         catch (Exception e)
         {
-            return false;
             Debug.LogError(e);
+            return false;
+            
         }
     }
     public async UniTask<bool> SetDocumetAsync(string document, string collectiton, IFirestoredata data)
@@ -156,8 +159,9 @@ public class FireStoreManager : IFireStoreManager
         }
         catch (Exception e)
         {
-            return false;
             Debug.LogError(e);
+            return false;
+            
         }
     }
     public async UniTask<bool> UpdateDocumetAsync(string document, string collectiton, Dictionary<string, object> dict)
