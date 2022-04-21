@@ -6,35 +6,34 @@ using Firebase.Firestore;
 using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-
-namespace yourcontents { 
-}
 public interface ISnapshot
 {
 }
 [FirestoreData] public interface IFirestoredata
 {
 }
-public delegate void EventListenerHandler(Dictionary<string, object> dict);
+public delegate void EventListenerHandler(string document, Dictionary<string, object> dict);
 public delegate void EventListenersHandler(List<Dictionary<string, object>> dicts);
 public interface IFireStoreManager
 {
-    //データ取得
+    //リスナー
     event EventListenerHandler ListenerHandler;
-    event EventListenersHandler ListenersHandler;
     void SetListenerHandler(string document, string collectiton);
     void SetListenerHandlers(string collectiton);
-    void SetListenerHandlers(string Document, object value, string collectiton);
+    void SetListenerHandlers(string property, object value, string collectiton);
+    //データ取得
     UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection);
-    UniTask<ISnapshot> GetISnapshotDocumetAsync(string document, string collection);
-    UniTask<List<Dictionary<string, object>>> GetDocumetsAsync(string document, object value, string collection);
-    UniTask<List<ISnapshot>> GetISnapshotDocumetsAsync(string document, object value, string collection);
+    UniTask<ISnapshot> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection);
+    UniTask<List<Dictionary<string, object>>> GetEqualToDocumetsAsync(string property, object value, string collection);
+    UniTask<List<ISnapshot>> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection);
     //データ書き込み
     UniTask<bool> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict);
     UniTask<bool> SetDocumetAsync(string document, string collectiton, IFirestoredata data);
-    UniTask<bool> UpdateDocumetAsync(string document, string collectiton, Dictionary<string, object> dict);
-    UniTask<bool> DeleteDocumetAsync(string document, string collectiton);
+    UniTask<bool> UpdateDocumetAsync(string document, string collection, Dictionary<string, object> dict);
+    UniTask<bool> DeleteDocumetAsync(string document, string collection);
 
+    DocumentReference GetDocumentReference(string document, string collection);
+    CollectionReference GetCollectionReference(string collection);
 
 }
 public class FireStoreManager : IFireStoreManager
@@ -42,41 +41,48 @@ public class FireStoreManager : IFireStoreManager
     private FirebaseFirestore _firestore;
 
     public event EventListenerHandler ListenerHandler;
-    public event EventListenersHandler ListenersHandler;
 
     public FireStoreManager()
     {
         _firestore = FirebaseFirestore.DefaultInstance;
     }
-    public void SetListenerHandler(string document, string collectiton)
+    public DocumentReference GetDocumentReference(string document, string collection)
     {
-        DocumentReference reference = _firestore.Collection(collectiton).Document(document);
+        DocumentReference reference = _firestore.Collection(collection).Document(document);
+        return reference;
+    }
+    public CollectionReference GetCollectionReference(string collection)
+    {
+        CollectionReference reference = _firestore.Collection(collection);
+        return reference;
+    }
+    public void SetListenerHandler(string document, string collection)
+    {
+        DocumentReference reference = _firestore.Collection(collection).Document(document);
 
         reference.Listen(snapshot => {
             Dictionary<string, object> dic = snapshot.ToDictionary();
             Debug.Log("listener");
-            ListenerHandler(dic);
+            ListenerHandler(document, dic);
         });
     }
 
-    public void SetListenerHandlers(string collectiton)
+    public void SetListenerHandlers(string collection)
     {
-        CollectionReference reference = _firestore.Collection(collectiton);
-        List<Dictionary<string, object>> dicts = new List<Dictionary<string, object>>();
+        CollectionReference reference = _firestore.Collection(collection);
         reference.Listen(snapshot => {
             foreach(DocumentSnapshot documentSnapshot in snapshot.Documents)
             {
                 var dict = documentSnapshot.ToDictionary();
-                dicts.Add(dict);
+                var document = documentSnapshot.Id;
+                ListenerHandler(document, dict);
             }
-            ListenersHandler(dicts);
         });
         
     }
-    public void SetListenerHandlers(string Document, object value,   string collectiton)
+    public void SetListenerHandlers(string property, object value, string collection)
     {
-
-        Query query = _firestore.Collection(collectiton).WhereEqualTo(Document,value);
+        Query query = _firestore.Collection(collection).WhereEqualTo(property, value);
         List<Action<Dictionary<string, object>>> callbacks = new List<Action<Dictionary<string, object>>>();
 
         query.Listen(snapshot => {
@@ -87,7 +93,6 @@ public class FireStoreManager : IFireStoreManager
                 callback(dict);
             }
             var a = snapshot.GetChanges();
-            
         });
     }
     public async UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection)
@@ -99,18 +104,17 @@ public class FireStoreManager : IFireStoreManager
         return dict;
 
     }
-    public async UniTask<ISnapshot> GetISnapshotDocumetAsync(string document, string collection)
+    public async UniTask<ISnapshot> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection)
     {
         DocumentReference docRef = _firestore.Collection(collection).Document(document);
         var snapshot = await docRef.GetSnapshotAsync();
-        if (!snapshot.Exists) return null;
         var snap = snapshot.ConvertTo<ISnapshot>();
         return snap;
     }
-    public async UniTask<List< Dictionary<string, object>>> GetDocumetsAsync(string document, object value,string collection)
+    public async UniTask<List< Dictionary<string, object>>> GetEqualToDocumetsAsync(string property, object value,string collection)
     {
         List<Dictionary<string, object>> list = new List<Dictionary<string, object>>();
-        Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(document, value);
+        Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(property, value);
         var capitalQuerySnapshot = await capitalQuery.GetSnapshotAsync();
         foreach(DocumentSnapshot documentSnapshot in capitalQuerySnapshot.Documents)
         {
@@ -120,10 +124,10 @@ public class FireStoreManager : IFireStoreManager
         return list;
     }
 
-    public async UniTask<List<ISnapshot>> GetISnapshotDocumetsAsync(string document, object value, string collection)
+    public async UniTask<List<ISnapshot>> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection)
     {
         List<ISnapshot> list = new List<ISnapshot>();
-        Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(document, value);
+        Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(property, value);
         var capitalQuerySnapshot = await capitalQuery.GetSnapshotAsync();
         foreach (DocumentSnapshot documentSnapshot in capitalQuerySnapshot.Documents)
         {
