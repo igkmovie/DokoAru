@@ -21,6 +21,8 @@ public interface IFireStoreManager
     void SetListenerHandler(string document, string collectiton);
     void SetListenerHandlers(string collectiton);
     void SetListenerHandlers(string property, object value, string collectiton);
+    
+    void StoptListener(string key); //keyはDocumentIDもしくは collectiton名、もしくはproperty名
     //データ取得
     UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection);
     UniTask<ISnapshot> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection);
@@ -34,13 +36,14 @@ public interface IFireStoreManager
 
     DocumentReference GetDocumentReference(string document, string collection);
     CollectionReference GetCollectionReference(string collection);
-
+    
 }
 public class FireStoreManager : IFireStoreManager
 {
     private FirebaseFirestore _firestore;
 
     public event EventListenerHandler ListenerHandler;
+    Dictionary<string, ListenerRegistration> ListenerDict = new Dictionary<string, ListenerRegistration>();
 
     public FireStoreManager()
     {
@@ -59,18 +62,18 @@ public class FireStoreManager : IFireStoreManager
     public void SetListenerHandler(string document, string collection)
     {
         DocumentReference reference = _firestore.Collection(collection).Document(document);
-
-        reference.Listen(snapshot => {
+        var listen = reference.Listen(snapshot => {
             Dictionary<string, object> dic = snapshot.ToDictionary();
             Debug.Log("listener");
             ListenerHandler(document, dic);
         });
+        ListenerDict.Add(document, listen);
     }
 
     public void SetListenerHandlers(string collection)
     {
         CollectionReference reference = _firestore.Collection(collection);
-        reference.Listen(snapshot => {
+        var listen = reference.Listen(snapshot => {
             foreach(DocumentSnapshot documentSnapshot in snapshot.Documents)
             {
                 var dict = documentSnapshot.ToDictionary();
@@ -78,14 +81,15 @@ public class FireStoreManager : IFireStoreManager
                 ListenerHandler(document, dict);
             }
         });
-        
+        ListenerDict.Add(collection, listen);
+
     }
     public void SetListenerHandlers(string property, object value, string collection)
     {
         Query query = _firestore.Collection(collection).WhereEqualTo(property, value);
         List<Action<Dictionary<string, object>>> callbacks = new List<Action<Dictionary<string, object>>>();
 
-        query.Listen(snapshot => {
+        var listen = query.Listen(snapshot => {
             foreach (DocumentSnapshot documentSnapshot in snapshot.Documents)
             {
                 var dict = documentSnapshot.ToDictionary();
@@ -94,6 +98,13 @@ public class FireStoreManager : IFireStoreManager
             }
             var a = snapshot.GetChanges();
         });
+        ListenerDict.Add(collection, listen);
+    }
+    public void StoptListener(string key)
+    {
+        var listen = ListenerDict[key];
+        listen.Stop();
+        ListenerDict.Remove(key);
     }
     public async UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection)
     {
