@@ -6,13 +6,16 @@ using Firebase.Firestore;
 
 public class test : MonoBehaviour
 {
-    private IFireStoreManager _fireStoreManager;
+    private IFireStoreModel _fireStoreModel;
     // Start is called before the first frame update
     async void Start()
     {
-        _fireStoreManager = new FireStoreManager();
-        _fireStoreManager.SetListenerHandlers("user");
-        _fireStoreManager.ListenerHandler += listener;
+        _fireStoreModel = new FireStoreModel();
+        _fireStoreModel.SetListenerHandlers("user");
+        _fireStoreModel.ListenerHandler += listener;
+        var email = "igkworks@gmail.com";
+        var password = "chiturisu";
+        await _fireStoreModel.SignInWithEmailAndPasswordAsync(email, password);
 
     }
 
@@ -33,7 +36,7 @@ public class test : MonoBehaviour
         //var a = await _fireStoreManager.UpdateDocumetAsync("igk@gmail.com", "user", dic);
         //var a = await _fireStoreManager.GetISnapshotDocumetAsync<Mydata>("igk@gmail.com", "user");
 
-        var a = await _fireStoreManager.GetEqualToDocumetsAsync<Mydata>("name", "kenichi","user");
+        var a = await _fireStoreModel.GetEqualToDocumetsAsync<Mydata>("name", "kenichi","user");
         Debug.Log(a.Count);
     }
     void listener(string document, Dictionary<string, object> dics)
