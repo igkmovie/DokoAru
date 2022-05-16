@@ -7,6 +7,8 @@ using Firebase.Auth;
 using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
+using System.Threading;
+
 public interface ISnapshot
 {
 }
@@ -18,8 +20,8 @@ public delegate void EventListenersHandler(List<Dictionary<string, object>> dict
 public interface IFireStoreModel
 {
     //Authentication
-    UniTask<RESULT> CreateUserWithEmailAndPasswordAsync(string email, string password);
-    UniTask<RESULT> SignInWithEmailAndPasswordAsync(string email, string password);
+    UniTask<RESULT> CreateUserWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default);
+    UniTask<RESULT> SignInWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default);
 
     //リスナー
     event EventListenerHandler ListenerHandler;
@@ -28,11 +30,11 @@ public interface IFireStoreModel
     void SetListenerHandlers(string property, object value, string collectiton);
     
     void StoptListener(string key); //keyはDocumentIDもしくは collectiton名、もしくはproperty名
-    //データ取得
-    UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection);
-    UniTask<ISnapshot> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection);
-    UniTask<List<Dictionary<string, object>>> GetEqualToDocumetsAsync(string property, object value, string collection);
-    UniTask<List<ISnapshot>> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection);
+                                    //データ取得
+    UniTask<(RESULT, Dictionary<string, object>)> GetDocumetAsync(string document, string collection);
+    UniTask<(RESULT, ISnapshot)> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection);
+    UniTask<(RESULT, List<Dictionary<string, object>>)> GetEqualToDocumetsAsync(string property, object value, string collection);
+    UniTask<(RESULT, List<ISnapshot>)> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection);
     //データ書き込み
     UniTask<RESULT> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict);
     UniTask<RESULT> SetDocumetAsync(string document, string collectiton, IFirestoredata data);
@@ -57,52 +59,76 @@ public class FireStoreModel : IFireStoreModel
         _firestore = FirebaseFirestore.DefaultInstance;
     }
 
-    public async UniTask<RESULT> CreateUserWithEmailAndPasswordAsync(string email,string password)
+    public async UniTask<RESULT> CreateUserWithEmailAndPasswordAsync(string email,string password, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var result = RESULT.ERROR;
-        await _auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWith(task =>
-         {
-             if (task.IsCanceled)
-             {
-                 Debug.LogError("CreateUserWithEmailAndPasswordAsync was canceled.");
-                 return;
-             }
-             if (task.IsFaulted)
-             {
-                 Debug.LogError("CreateUserWithEmailAndPasswordAsync encountered an error: " + task.Exception);
-                 return;
-             }
-             FirebaseUser newUser = task.Result;
-             Debug.LogFormat("Firebase user created successfully: {0} ({1})",
-                 newUser.DisplayName, newUser.UserId);
-             result = RESULT.SUCCESS;
-         });
-        return result;
-    }
-    public async UniTask<RESULT> SignInWithEmailAndPasswordAsync(string email, string password)
-    {
-        var result = RESULT.ERROR;
-
-        await _auth.SignInWithEmailAndPasswordAsync(email, password).ContinueWith(task =>
+        try
         {
-            if (task.IsCanceled)
+            await _auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWith(task =>
             {
-                Debug.LogError("SignInWithEmailAndPasswordAsync was canceled.");
-                return;
-            }
-            if (task.IsFaulted)
-            {
-                Debug.LogError("SignInWithEmailAndPasswordAsync encountered an error: " + task.Exception);
-                return;
-            }
-
-            Firebase.Auth.FirebaseUser newUser = task.Result;
-            Debug.LogFormat("User signed in successfully: {0} ({1})",
-                newUser.Email, newUser.UserId);
+                if (task.IsCanceled)
+                {
+                    Debug.LogError("CreateUserWithEmailAndPasswordAsync was canceled.");
+                    return;
+                }
+                if (task.IsFaulted)
+                {
+                    Debug.LogError("CreateUserWithEmailAndPasswordAsync encountered an error: " + task.Exception);
+                    return;
+                }
+                FirebaseUser newUser = task.Result;
+                Debug.LogFormat("Firebase user created successfully: {0} ({1})",
+                    newUser.DisplayName, newUser.UserId);
+                result = RESULT.SUCCESS;
+            }, ct);
+            return result;
+        }
+        catch (OperationCanceledException e)
+        {
+            // OperationCanceledExceptionをキャッチしてキャンセルをハンドリング
+            Debug.Log("キャンセルされた: " + e);
             result = RESULT.SUCCESS;
-        });
+            throw;
+        }
 
-        return result;
+        
+    }
+    public async UniTask<RESULT> SignInWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default)
+    {
+        var result = RESULT.ERROR;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            await _auth.SignInWithEmailAndPasswordAsync(email, password).ContinueWith(task =>
+            {
+                if (task.IsCanceled)
+                {
+                    Debug.LogError("SignInWithEmailAndPasswordAsync was canceled.");
+                    return;
+                }
+                if (task.IsFaulted)
+                {
+                    Debug.LogError("SignInWithEmailAndPasswordAsync encountered an error: " + task.Exception);
+                    return;
+                }
+
+                Firebase.Auth.FirebaseUser newUser = task.Result;
+                Debug.LogFormat("User signed in successfully: {0} ({1})",
+                    newUser.Email, newUser.UserId);
+                result = RESULT.SUCCESS;
+            }, ct);
+
+            return result;
+        }
+        catch (OperationCanceledException e)
+        {
+            // OperationCanceledExceptionをキャッチしてキャンセルをハンドリング
+            Debug.Log("キャンセルされた: " + e);
+            result = RESULT.ERROR;
+            throw;
+        }
+
     }
 
     public DocumentReference GetDocumentReference(string document, string collection)
@@ -162,46 +188,72 @@ public class FireStoreModel : IFireStoreModel
         listen.Stop();
         _listenerDict.Remove(key);
     }
-    public async UniTask<Dictionary<string, object>> GetDocumetAsync(string document, string collection)
+    public async UniTask<(RESULT, Dictionary<string, object>)> GetDocumetAsync(string document, string collection)
     {
         DocumentReference docRef = _firestore.Collection(collection).Document(document);
         var snapshot = await docRef.GetSnapshotAsync();
-        if (!snapshot.Exists) return null;
+        if (!snapshot.Exists) return (RESULT.ERROR,null);
         var dict = snapshot.ToDictionary();
-        return dict;
+        return (RESULT.SUCCESS, dict);
 
     }
-    public async UniTask<ISnapshot> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection)
+    public async UniTask<(RESULT, ISnapshot)> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection)
     {
-        DocumentReference docRef = _firestore.Collection(collection).Document(document);
-        var snapshot = await docRef.GetSnapshotAsync();
-        var snap = snapshot.ConvertTo<ISnapshot>();
-        return snap;
-    }
-    public async UniTask<List< Dictionary<string, object>>> GetEqualToDocumetsAsync(string property, object value,string collection)
-    {
-        List<Dictionary<string, object>> list = new List<Dictionary<string, object>>();
-        Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(property, value);
-        var capitalQuerySnapshot = await capitalQuery.GetSnapshotAsync();
-        foreach(DocumentSnapshot documentSnapshot in capitalQuerySnapshot.Documents)
+        try
         {
-            Dictionary<string, object> dict = documentSnapshot.ToDictionary();
-            list.Add(dict);
+            DocumentReference docRef = _firestore.Collection(collection).Document(document);
+            var snapshot = await docRef.GetSnapshotAsync();
+            var snap = snapshot.ConvertTo<ISnapshot>();
+            return (RESULT.SUCCESS ,snap);
         }
-        return list;
+        catch (Exception e)
+        {      
+            return (RESULT.ERROR, default(ISnapshot));
+        }
+
+
+    }
+    public async UniTask<(RESULT, List< Dictionary<string, object>>)> GetEqualToDocumetsAsync(string property, object value,string collection)
+    {
+        try
+        {
+            List<Dictionary<string, object>> list = new List<Dictionary<string, object>>();
+            Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(property, value);
+            var capitalQuerySnapshot = await capitalQuery.GetSnapshotAsync();
+            foreach (DocumentSnapshot documentSnapshot in capitalQuerySnapshot.Documents)
+            {
+                Dictionary<string, object> dict = documentSnapshot.ToDictionary();
+                list.Add(dict);
+            }
+            return (RESULT.SUCCESS, list);
+        }
+        catch (Exception e)
+        {
+            return (RESULT.ERROR, default(List<Dictionary<string, object>>));
+        }
+
     }
 
-    public async UniTask<List<ISnapshot>> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection)
+    public async UniTask<(RESULT, List<ISnapshot>)> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection)
     {
-        List<ISnapshot> list = new List<ISnapshot>();
-        Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(property, value);
-        var capitalQuerySnapshot = await capitalQuery.GetSnapshotAsync();
-        foreach (DocumentSnapshot documentSnapshot in capitalQuerySnapshot.Documents)
+        try
         {
-            ISnapshot snap = documentSnapshot.ConvertTo<ISnapshot>();
-            list.Add(snap);
+            List<ISnapshot> list = new List<ISnapshot>();
+            Query capitalQuery = _firestore.Collection(collection).WhereEqualTo(property, value);
+            var capitalQuerySnapshot = await capitalQuery.GetSnapshotAsync();
+            foreach (DocumentSnapshot documentSnapshot in capitalQuerySnapshot.Documents)
+            {
+                ISnapshot snap = documentSnapshot.ConvertTo<ISnapshot>();
+                list.Add(snap);
+            }
+            return (RESULT.SUCCESS, list);
         }
-        return list;
+        catch (Exception e)
+        {
+            return (RESULT.ERROR, default(List<ISnapshot>));
+        }
+
+
     }
 
     public async UniTask<RESULT> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict)
