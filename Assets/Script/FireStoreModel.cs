@@ -17,11 +17,11 @@ public interface ISnapshot
 }
 public delegate void EventListenerHandler(string document, Dictionary<string, object> dict);
 public delegate void EventListenersHandler(List<Dictionary<string, object>> dicts);
-public interface IFireStoreModel
+public interface IServerModel
 {
     //Authentication
-    UniTask<RESULT> CreateUserWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default);
-    UniTask<RESULT> SignInWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default);
+    Task<RESULT> CreateUserWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default);
+    Task<RESULT> SignInWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default);
 
     //リスナー
     event EventListenerHandler ListenerHandler;
@@ -31,21 +31,21 @@ public interface IFireStoreModel
     
     void StoptListener(string key); //keyはDocumentIDもしくは collectiton名、もしくはproperty名
                                     //データ取得
-    UniTask<(RESULT, Dictionary<string, object>)> GetDocumetAsync(string document, string collection);
-    UniTask<(RESULT, ISnapshot)> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection);
-    UniTask<(RESULT, List<Dictionary<string, object>>)> GetEqualToDocumetsAsync(string property, object value, string collection);
-    UniTask<(RESULT, List<ISnapshot>)> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection);
+    Task<(RESULT, Dictionary<string, object>)> GetDocumetAsync(string document, string collection);
+    Task<(RESULT, ISnapshot)> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection);
+    Task<(RESULT, List<Dictionary<string, object>>)> GetEqualToDocumetsAsync(string property, object value, string collection);
+    Task<(RESULT, List<ISnapshot>)> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection);
     //データ書き込み
-    UniTask<RESULT> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict);
-    UniTask<RESULT> SetDocumetAsync(string document, string collectiton, IFirestoredata data);
-    UniTask<RESULT> UpdateDocumetAsync(string document, string collection, Dictionary<string, object> dict);
-    UniTask<RESULT> DeleteDocumetAsync(string document, string collection);
+    Task<RESULT> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict);
+    Task<RESULT> SetDocumetAsync(string document, string collectiton, IFirestoredata data);
+    Task<RESULT> UpdateDocumetAsync(string document, string collection, Dictionary<string, object> dict);
+    Task<RESULT> DeleteDocumetAsync(string document, string collection);
 
     DocumentReference GetDocumentReference(string document, string collection);
     CollectionReference GetCollectionReference(string collection);
     
 }
-public class FireStoreModel : IFireStoreModel
+public class FireStoreModel : IServerModel
 {
     private FirebaseFirestore _firestore;
     protected FirebaseAuth _auth;
@@ -59,7 +59,7 @@ public class FireStoreModel : IFireStoreModel
         _firestore = FirebaseFirestore.DefaultInstance;
     }
 
-    public async UniTask<RESULT> CreateUserWithEmailAndPasswordAsync(string email,string password, CancellationToken ct = default)
+    public async Task<RESULT> CreateUserWithEmailAndPasswordAsync(string email,string password, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         var result = RESULT.ERROR;
@@ -88,13 +88,14 @@ public class FireStoreModel : IFireStoreModel
         {
             // OperationCanceledExceptionをキャッチしてキャンセルをハンドリング
             Debug.Log("キャンセルされた: " + e);
-            result = RESULT.SUCCESS;
+            result = RESULT.ERROR;
+            return result;
             throw;
         }
 
         
     }
-    public async UniTask<RESULT> SignInWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default)
+    public async Task<RESULT> SignInWithEmailAndPasswordAsync(string email, string password, CancellationToken ct = default)
     {
         var result = RESULT.ERROR;
         try
@@ -126,6 +127,7 @@ public class FireStoreModel : IFireStoreModel
             // OperationCanceledExceptionをキャッチしてキャンセルをハンドリング
             Debug.Log("キャンセルされた: " + e);
             result = RESULT.ERROR;
+            return result;
             throw;
         }
 
@@ -188,7 +190,7 @@ public class FireStoreModel : IFireStoreModel
         listen.Stop();
         _listenerDict.Remove(key);
     }
-    public async UniTask<(RESULT, Dictionary<string, object>)> GetDocumetAsync(string document, string collection)
+    public async Task<(RESULT, Dictionary<string, object>)> GetDocumetAsync(string document, string collection)
     {
         DocumentReference docRef = _firestore.Collection(collection).Document(document);
         var snapshot = await docRef.GetSnapshotAsync();
@@ -197,7 +199,7 @@ public class FireStoreModel : IFireStoreModel
         return (RESULT.SUCCESS, dict);
 
     }
-    public async UniTask<(RESULT, ISnapshot)> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection)
+    public async Task<(RESULT, ISnapshot)> GetISnapshotDocumetAsync<ISnapshot>(string document, string collection)
     {
         try
         {
@@ -213,7 +215,7 @@ public class FireStoreModel : IFireStoreModel
 
 
     }
-    public async UniTask<(RESULT, List< Dictionary<string, object>>)> GetEqualToDocumetsAsync(string property, object value,string collection)
+    public async Task<(RESULT, List< Dictionary<string, object>>)> GetEqualToDocumetsAsync(string property, object value,string collection)
     {
         try
         {
@@ -234,7 +236,7 @@ public class FireStoreModel : IFireStoreModel
 
     }
 
-    public async UniTask<(RESULT, List<ISnapshot>)> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection)
+    public async Task<(RESULT, List<ISnapshot>)> GetEqualToDocumetsAsync<ISnapshot>(string property, object value, string collection)
     {
         try
         {
@@ -256,7 +258,7 @@ public class FireStoreModel : IFireStoreModel
 
     }
 
-    public async UniTask<RESULT> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict)
+    public async Task<RESULT> SetDocumetAsync(string document, string collectiton, Dictionary<string, object> dict)
     {
         var result = RESULT.NONE;
         try
@@ -275,7 +277,7 @@ public class FireStoreModel : IFireStoreModel
             
         }
     }
-    public async UniTask<RESULT> SetDocumetAsync(string document, string collectiton, IFirestoredata data)
+    public async Task<RESULT> SetDocumetAsync(string document, string collectiton, IFirestoredata data)
     {
         var result = RESULT.NONE;
         try
@@ -293,7 +295,7 @@ public class FireStoreModel : IFireStoreModel
 
         }
     }
-    public async UniTask<RESULT> UpdateDocumetAsync(string document, string collectiton, Dictionary<string, object> dict)
+    public async Task<RESULT> UpdateDocumetAsync(string document, string collectiton, Dictionary<string, object> dict)
     {
         var result = RESULT.NONE;
         try
@@ -311,7 +313,7 @@ public class FireStoreModel : IFireStoreModel
 
         }
     }
-    public async UniTask<RESULT> DeleteDocumetAsync(string document, string collectiton)
+    public async Task<RESULT> DeleteDocumetAsync(string document, string collectiton)
     {
         var result = RESULT.NONE;
         try

@@ -6,7 +6,7 @@ using Firebase.Firestore;
 
 public class test : MonoBehaviour
 {
-    private IFireStoreModel _fireStoreModel;
+    private IServerModel _fireStoreModel;
     // Start is called before the first frame update
     async void Start()
     {
@@ -37,7 +37,7 @@ public class test : MonoBehaviour
         //var a = await _fireStoreManager.GetISnapshotDocumetAsync<Mydata>("igk@gmail.com", "user");
 
         var a = await _fireStoreModel.GetEqualToDocumetsAsync<Mydata>("name", "kenichi","user");
-        Debug.Log(a.Count);
+        Debug.Log(a.Item2.Count);
     }
     void listener(string document, Dictionary<string, object> dics)
     {
